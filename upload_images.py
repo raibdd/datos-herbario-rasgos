@@ -68,6 +68,14 @@ def process_row(row):
     if image_id in uploaded:
         return
 
+    url = row.image_resized_60
+
+    # ---- skip invalid or missing URLs ----
+    if not url or url == "#" or not urlparse(url).scheme:
+        print(f"Skipping {image_id}: invalid URL -> {url}")
+        mark_uploaded(image_id)
+        return
+
     # respect rate limit
     wait_for_slot()
 
