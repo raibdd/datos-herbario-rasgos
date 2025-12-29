@@ -1,6 +1,7 @@
 import requests
 import json
 import boto3
+import botocore
 import os
 import time
 import threading
@@ -59,12 +60,19 @@ def mark_uploaded(image_id):
 
 @retry(
     stop=stop_after_attempt(4),
-    wait=wait_exponential(multiplier=1, min=2, max=30)
+    wait=wait_exponential(multiplier=1, min=2, max=30),
+    retry=lambda retry_state: isinstance(retry_state.outcome.exception(), (
+        requests.exceptions.Timeout,
+        requests.exceptions.ConnectionError,
+    ))
 )
+def fetch(url):
+    return requests.get(url, stream=True, timeout=15)
+
 def process_row(row):
     image_id = str(row.id)
 
-    # already handled — skip
+    # ---- already handled — skip ----
     if image_id in uploaded:
         return
 
@@ -76,37 +84,54 @@ def process_row(row):
         mark_uploaded(image_id)
         return
 
-    # respect rate limit
-    wait_for_slot()
+    try:
+        # ---- respect rate limit ----
+        wait_for_slot()
 
-    resp = requests.get(row.image_resized_60, stream=True, timeout=15)
-    resp.raise_for_status()
+        resp = requests.get(url, stream=True, timeout=15)
+        resp.raise_for_status()
 
-    # upload image
-    s3.upload_fileobj(
-        resp.raw,
-        BUCKET,
-        f"images/{image_id}.jpg",
-        ExtraArgs={
-            "ContentType": "image/jpeg",
-        }
-    )
+        # ---- upload image ----
+        s3.upload_fileobj(
+            resp.raw,
+            BUCKET,
+            f"images/{image_id}.jpg",
+            ExtraArgs={"ContentType": "image/jpeg"},
+        )
 
-    # build metadata dict
-    metadata = row._asdict()
-    metadata.pop("image_resized_10", None)
+        # ---- build metadata dict ----
+        metadata = row._asdict()
+        metadata.pop("image_resized_10", None)
 
-    buf = BytesIO(json.dumps(metadata, default=str).encode("utf-8"))
+        buf = BytesIO(json.dumps(metadata, default=str).encode("utf-8"))
 
-    # upload metadata json
-    s3.upload_fileobj(
-        buf,
-        BUCKET,
-        f"metadata/{image_id}.json",
-        ExtraArgs={"ContentType": "application/json"}
-    )
+        # ---- upload metadata JSON ----
+        s3.upload_fileobj(
+            buf,
+            BUCKET,
+            f"metadata/{image_id}.json",
+            ExtraArgs={"ContentType": "application/json"},
+        )
 
-    mark_uploaded(image_id)
+        # ---- success: mark uploaded ----
+        mark_uploaded(image_id)
+
+    except botocore.exceptions.NoCredentialsError:
+        # This is the “no credentials” hang you saw earlier
+        print(f"[{image_id}] ❌ No AWS credentials found — stopping.")
+        raise
+
+    except Exception as e:
+        # Log but DO NOT mark uploaded
+        print(f"[{image_id}] failed: {e}")
+
+    finally:
+        # make sure network handle closes
+        try:
+            resp.close()
+        except Exception:
+            pass
+
 
 
 def main():
