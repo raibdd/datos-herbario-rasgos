@@ -92,28 +92,13 @@ else:
 # rows where ID appears more than once
 dups = df[df.duplicated("id", keep=False)]
 
-print(f"Duplicate IDs: {dups['id'].nunique()}")
+dupe_ids = (
+    df[df.duplicated("id", keep=False)]
+        ["id"]
+        .drop_duplicates()
+        .head(10)   # look at first 10 — change if you want more
+)
 
-def hash_url(url):
-    try:
-        r = requests.get(url, timeout=20)
-        r.raise_for_status()
-        return hashlib.md5(r.content).hexdigest()
-    except Exception as e:
-        return f"ERROR: {e}"
+dupe_ids.tolist()
 
-results = []
-
-for specimen_id, group in dups.groupby("id"):
-    hashes = group["image_resized_60"].apply(hash_url)
-    unique_hashes = set(hashes)
-
-    results.append({
-        "id": specimen_id,
-        "image_count": len(group),
-        "unique_image_hashes": len(unique_hashes),
-        "hashes": list(unique_hashes)
-    })
-
-dups_report = pd.DataFrame(results)
-print(dups_report.head(20))
+print(dupe_ids)
