@@ -105,7 +105,7 @@ def hash_url(url):
 results = []
 
 for specimen_id, group in dups.groupby("id"):
-    hashes = group["image_url"].apply(hash_url)
+    hashes = group["image_resized_60"].apply(hash_url)
     unique_hashes = set(hashes)
 
     results.append({
