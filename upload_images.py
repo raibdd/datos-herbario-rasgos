@@ -88,7 +88,12 @@ def process_row(row):
         # ---- respect rate limit ----
         wait_for_slot()
 
-        resp = requests.get(url, stream=True, timeout=15)
+        resp = requests.get(
+            url, 
+            headers={"User-Agent": "Mozilla/5.0"},
+            stream=True, 
+            timeout=15,
+        )
         resp.raise_for_status()
 
         # ---- upload image ----
