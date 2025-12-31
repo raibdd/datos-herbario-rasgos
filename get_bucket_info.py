@@ -1,5 +1,7 @@
 import boto3
 import pandas as pd
+import hashlib
+import requests
 
 BUCKET = "rasgos-dev-ia-9ca0b317-e219-4941-ba8e-184005886217"
 PARQUET = "specimens_herbario.parquet"
@@ -85,3 +87,33 @@ if missing_from_s3:
     print(f"\nWrote needs_retry.txt with {len(missing_from_s3)} IDs")
 else:
     print("\nEverything marked uploaded exists — nothing to retry 🎉")
+
+
+# rows where ID appears more than once
+dups = df[df.duplicated("id", keep=False)]
+
+print(f"Duplicate IDs: {dups['id'].nunique()}")
+
+def hash_url(url):
+    try:
+        r = requests.get(url, timeout=20)
+        r.raise_for_status()
+        return hashlib.md5(r.content).hexdigest()
+    except Exception as e:
+        return f"ERROR: {e}"
+
+results = []
+
+for specimen_id, group in dups.groupby("id"):
+    hashes = group["image_url"].apply(hash_url)
+    unique_hashes = set(hashes)
+
+    results.append({
+        "id": specimen_id,
+        "image_count": len(group),
+        "unique_image_hashes": len(unique_hashes),
+        "hashes": list(unique_hashes)
+    })
+
+dups_report = pd.DataFrame(results)
+print(dups_report.head(20))
