@@ -23,7 +23,7 @@ UPLOADED_IDS_PATH = "uploaded.txt"
 NUM_WORKERS = 10
 REQUESTS_PER_MIN = 60   # effectively 1 req/sec average
 
-df = pd.read_parquet("specimens_herbario.parquet")
+df = pd.read_parquet("specimens_herbario_2.parquet")
 
 # ---- resume tracking ----
 uploaded = set()
